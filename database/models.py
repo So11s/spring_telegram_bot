@@ -1,72 +1,33 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, create_engine, select, Table
+from sqlalchemy import Column, Integer, String, DateTime, BigInteger, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.orm import relationship
 
+import datetime
 
 Base = declarative_base()
 
-
-association_table = Table(
-    "association_table", Base.metadata,
-    Column("user_id", Integer, ForeignKey("users.id")),
-    Column("book_id", Integer, ForeignKey("books.id")),
-)
-
-class Book(Base):
-    __tablename__ = "books"  # Имя таблицы
-    id = Column(Integer, primary_key=True)
-    title = Column(String(60), nullable=False)
-    author = Column(String(30), nullable=False)
-    reviews = relationship("Reviews", backref="book", lazy=True)  # Связываем таблицу "reviews" с таблицей "Book"
-    readers = relationship("User", secondary=association_table, back_populates='books', lazy=True)
-    film = relationship("Film", back_populates="book", uselist=False, lazy=True)
-
-    def __repr__(self):
-        return self.title
-
-
-class Reviews(Base):
-    """Класс с обзорами книг"""
-
-    __tablename__ = "reviews"
-    id = Column(Integer, primary_key=True)
-    text = Column(String(2000), nullable=False)
-    book_id = Column(Integer, ForeignKey("books.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-
-    def __repr__(self):
-        return f"От {self.reviewer}"
-
-
 class User(Base):
-    __tablename__ = "users"
+    __tablename__ = "Users"
     id = Column(Integer, primary_key=True)
-    name = Column(String(20), nullable=False)
-    reviews = relationship("Reviews", backref="reviewer", lazy=True)
-    books = relationship("Book", secondary=association_table, back_populates="readers", lazy=True)
-
+    tg_id = Column(BigInteger, nullable=False)
+    city = Column(String)
+    connection_date = Column(DateTime, default=datetime.datetime.now, nullable=False)
+    reports = relationship("WeatherReport", backref="report", lazy=True, cascade='all, delete-orphan')
 
     def __repr__(self):
-        return self.name
+        return self.tg_id
 
 
-class Film(Base):
-    __tablename__ = 'films'
+class WeatherReport(Base):
+    __tablename__ = "WeatherReports"
     id = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False)
-    producer = Column(String, nullable=False)
-    book_id = Column(Integer, ForeignKey('books.id'))
-    book = relationship('Book', back_populates='film', uselist=False, lazy=True)
+    owner = Column(Integer, ForeignKey("Users.id"), nullable=False)
+    date = Column(DateTime, default=datetime.datetime.now, nullable=False)
+    temp = Column(Integer, nullable=False)
+    feels_like = Column(Integer, nullable=False)  # Температура по ощущениям
+    wind_speed = Column(Integer, nullable=False)  # Скорость ветра
+    pressure_mm = Column(Integer, nullable=False)  # Давление
+    city = Column(String, nullable=False)
 
-
-engine = create_engine('postgresql://postgres:Sid124ea@localhost:5432/postgres', echo=True)
-
-Base.metadata.create_all(engine)
-
-Session = sessionmaker(bind=engine)
-session = Session()
-#
-book1 = session.query(Book).filter_by(title='Робинзон Крузо').first()
-film1 = session.query(Film).filter_by(name='Невероятные приключения Робинзона').first()
-film2 = session.query(Film).filter_by(name='Не правильный фильм').first()
-print(film1)
+    def __repr__(self):
+        return self.city
