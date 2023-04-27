@@ -3,7 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-.settings/api_weather.py
+settings/api_weather.py/
 
 # C extensions
 *.so

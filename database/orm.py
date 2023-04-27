@@ -18,3 +18,10 @@ def add_user(tg_id):
         new_user = User(tg_id=tg_id)
         session.add(new_user)
         session.commit()
+
+def set_user_city(tg_id, city):
+    session = Session()
+    user = session.query(User).filter(User.tg_id == tg_id).first()
+    if not user.city:
+        user.city = city
+        session.commit()

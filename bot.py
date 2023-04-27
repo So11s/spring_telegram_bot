@@ -71,13 +71,29 @@ async def set_user_city_start(message: Message):
     await message.reply(text=text, reply_markup=markup)
     await SetUserCity.waiting_user_city.set()
 
+
+@dp.message_handler(state=SetUserCity)
+async def user_city_chosen(message: Message, state: FSMContext):
+    await state.update_data(waiting_user_city=message.text.capitalize())
+    user_data = await state.get_data()
+    orm.set_user_city(message.from_user.id, user_data.get("waiting_user_city"))
+    markup = await main_menu()
+    text = f'Запомнил, {user_data.get("waiting_user_city")} ваш город'
+    await message.answer(text, reply_markup=markup)
+    await state.finish()
+
+
 @dp.message_handler(state=ChoiceCityWeather.waiting_city)
 async def city_chosen(message: Message, state: FSMContext):
     await state.update_data(waiting_city=message.text.capitalize())
     markup = await main_menu()
     city = await state.get_data()
     data = get_weather(city.get('waiting_city'))
-    text = f'Погода в {city.get("waiting_city")}\nТемпература: {data["temp"]} C\nОщущается как: {data["feels_like"]} C \nСкорость ветра: {data["wind_speed"]}м/с\nДавление: {data["pressure_mm"]}мм'
+    text = f'''Погода в {city.get("waiting_city")}
+    Температура: {data["temp"]} C
+    Ощущается как: {data["feels_like"]} C 
+    Скорость ветра: {data["wind_speed"]}м/с
+    Давление: {data["pressure_mm"]}мм'''
     await message.answer(text=text, reply_markup=markup)
     await state.finish()
 
