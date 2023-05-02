@@ -66,11 +66,8 @@ async def get_user_city_weather(message: Message):
     data = get_weather(city)
     orm.create_report(message.from_user.id, data["temp"], data["feels_like"], data["wind_speed"],
                       data["pressure_mm"], city)
-    text = f'''Погода в {city.get("waiting_city")}
-    Температура: {data["temp"]} C
-    Ощущается как: {data["feels_like"]} C 
-    Скорость ветра: {data["wind_speed"]}м/с
-    Давление: {data["pressure_mm"]}мм'''
+    text = f'Погода в {city}\nТемпература: {data["temp"]} C\nОщущается как: {data["feels_like"]} C \nСкорость ветра: ' \
+           f'{data["wind_speed"]}м/с\nДавление: {data["pressure_mm"]}мм'
     await message.reply(text=text, reply_markup=markup)
 
 
@@ -109,6 +106,130 @@ async def get_reports(message: Message):
         InlineKeyboardButton(text=f'{current_page - 1}/{total_pages}', callback_data='None'),
         InlineKeyboardButton(text='Вперёд', callback_data=f'next_{current_page}'))
     await message.reply(text=text, reply_markup=inline_markup)
+
+
+# @dp.callback_query_handler(lambda call: True)
+# async def callback_query(call, state: FSMContext):
+#     query_type = call.data.split('_')[0]
+#     async with state.proxy() as data:
+#         data['current_page'] = int(call.data.split('_')[1])
+#         await state.update_data(current_page=data['current_page'])
+#         if query_type == 'next':
+#             reports = orm.get_reports(call.from_user.id)
+#             total_pages = math.ceil(len(reports) / 4)
+#             inline_markup = InlineKeyboardMarkup()
+#             if data['current_page']*4 >= len(reports):
+#                 for report in reports[data['current_page']*4-4:len(reports) + 1]:
+#                     inline_markup.add(InlineKeyboardButton(
+#                     text=f'{report.city} {report.date.day}.{report.date.month}.{report.date.year}',
+#                     callback_data=f'report_{report.id}'
+#                     ))
+#                 data['current_page'] -= 1
+#                 inline_markup.row(
+#                     InlineKeyboardButton(text='Назад', callback_data=f'prev_{data["current_page"]}'),
+#                     InlineKeyboardButton(text=f'{data["current_page"]+1}/{total_pages}', callback_data='None')
+#                 )
+#                 await call.message.edit_text(text="История запросов:", reply_markup=inline_markup)
+#                 return
+#             for report in reports[data['current_page']*4-4:data['current_page']*4]:
+#                 inline_markup.add(InlineKeyboardButton(
+#                 text=f'{report.city} {report.date.day}.{report.date.month}.{report.date.year}',
+#                 callback_data=f'report_{report.id}'
+#             ))
+#             data['current_page'] += 1
+#             inline_markup.row(
+#                 InlineKeyboardButton(text='Назад', callback_data=f'prev_{data["current_page"]-2}'),
+#                 InlineKeyboardButton(text=f'{data["current_page"]-1}/{total_pages}', callback_data='None'),
+#                 InlineKeyboardButton(text='Вперёд', callback_data=f'next_{data["current_page"]}')
+#             )
+#             await call.message.edit_text(text="История запросов:", reply_markup=inline_markup)
+
+
+@dp.callback_query_handler(lambda call: True)
+async def callback_query(call, state: FSMContext):
+    # Выход, если получили str(None)
+    if call.data is None:
+        return
+    # Получаем тип операции  и номер страницы или отчета из callback_data
+    query_type, query_id = call.data.split('_')
+    async with state.proxy() as data:
+        # Сохраняем страницу, на которой находится пользователь, в память
+        data['current_page'] = int(query_id)
+        await state.update_data(current_page=data['current_page'])
+
+        # Если пользователь нажал кнопку вперед
+        if query_type == 'next' or query_type == 'prev':
+            reports = orm.get_reports(call.from_user.id)
+            total_pages = math.ceil(len(reports) / 4)
+
+            # Проверка на последнюю страницу
+            if data['current_page'] * 4 >= len(reports):
+                inline_markup, data['current_page'] = await hist_last_page(
+                    reports, data['current_page'], total_pages
+                )
+                await call.message.edit_text(
+                    text='История запросов:',
+                    reply_markup=inline_markup
+                )
+                return
+            inline_markup, data['current_page'] = await hist_mid_page(
+                reports, data['current_page'], total_pages
+            )
+            await call.message.edit_text(
+                text='История запросов:',
+                reply_markup=inline_markup
+            )
+            return
+
+
+async def hist_last_page(reports, page: int, total_pages: int):
+    inline_markup = InlineKeyboardMarkup()
+    for report in reports[page * 4 - 4: len(reports) + 1]:
+        inline_markup.add(
+            InlineKeyboardButton(
+                text=f'{report.city} {report.date.day}.{report.date.month}.{report.date.year}',
+                callback_data=f'report_{report.id}'
+            )
+        )
+    page -= 1
+    inline_markup.row(
+        InlineKeyboardButton(
+            text='Назад',
+            callback_data=f'prev_{page}'
+        ),
+        InlineKeyboardButton(
+            text=f'{page + 1}/{total_pages}',
+            callback_data='None'
+        )
+    )
+    return inline_markup, page
+
+
+async def hist_mid_page(reports, page: int, total_pages: int):
+    inline_markup = InlineKeyboardMarkup()
+    for report in reports[page*4 - 4:page*4]:
+        inline_markup.add(
+            InlineKeyboardButton(
+                text=f'{report.city} {report.date.day}.{report.date.month}.{report.date.year}',
+                callback_data=f'report_{report.id}'
+            )
+        )
+    page += 1
+    inline_markup.row(
+        InlineKeyboardButton(
+            text='Назад',
+            callback_data=f'prev_{page - 2}'
+        ),
+        InlineKeyboardButton(
+            text=f'{page - 1}/{total_pages}',
+            callback_data='None'
+        ),
+        InlineKeyboardButton(
+            text='Вперёд',
+            callback_data=f'next_{page}'
+        )
+    )
+    return inline_markup, page
 
 
 @dp.message_handler(state=SetUserCity)
