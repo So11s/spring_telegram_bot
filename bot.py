@@ -108,10 +108,10 @@ async def get_reports(message: Message):
     await message.reply(text=text, reply_markup=inline_markup)
 
 
-@dp.callback_query_handler(lambda call: True)
+@dp.callback_query_handler(lambda call: 'users' not in call.data)
 async def callback_query(call, state: FSMContext):
     # Получаем тип операции  и номер страницы или отчета из callback_data
-    query_type, query_id = call.data.split('_')
+    query_type = call.data.split('_')[0]
     async with state.proxy() as data:
 
         if data.get('current_page', None) is None:
@@ -138,16 +138,16 @@ async def callback_query(call, state: FSMContext):
             buttons = []
             if data['current_page']:
                 buttons.append(InlineKeyboardButton(text='Назад', callback_data=f'prev_{data["current_page"] - 1}'))
-            buttons.append(InlineKeyboardButton(text=f'{data["current_page"]+1}/{total_pages}', callback_data='None'))
-            if (data['current_page']+1)*4 < len(reports):
+            buttons.append(InlineKeyboardButton(text=f'{data["current_page"] + 1}/{total_pages}', callback_data='None'))
+            if (data['current_page'] + 1) * 4 < len(reports):
                 buttons.append(InlineKeyboardButton(text='Вперёд', callback_data=f'next_{data["current_page"]}'))
             inline_markup.row(*buttons)
             await call.message.edit_text(text="История запросов:", reply_markup=inline_markup)
 
         if query_type == 'report':
             reports = orm.get_reports(call.from_user.id)
-            report_id = call.data.split('_')[1]
             inline_markup = InlineKeyboardMarkup()
+            report_id = call.data.split('_')[1]
             for report in reports:
                 if report.id == int(report_id):
                     inline_markup.add(
@@ -164,6 +164,129 @@ async def callback_query(call, state: FSMContext):
                         reply_markup=inline_markup
                     )
                     break
+
+        if query_type == 'delete' and call.data.split('_')[1] == 'report':
+            report_id = call.data.split('_')[2]
+            orm.delete_report(int(report_id))
+            current_page = 0
+            reports = orm.get_reports(call.from_user.id)
+            total_pages = math.ceil(len(reports) / 4)
+            text = 'История запросов'
+            inline_markup = InlineKeyboardMarkup()
+            for report in reports[current_page * 4: (current_page + 1) * 4]:
+                inline_markup.add(InlineKeyboardButton(
+                    text=f'{report.city} {report.date.day}.{report.date.month}.{report.date.year}',
+                    callback_data=f'report_{report.id}'
+                ))
+            btns = [InlineKeyboardButton(text=f'{current_page + 1}/{total_pages}', callback_data='None')]
+            if len(reports) > 4:
+                btns.append(InlineKeyboardButton(text='Вперёд', callback_data=f'next_{current_page}'))
+            inline_markup.row(*btns)
+            await state.update_data(current_page=current_page)
+            await call.message.edit_text(text, reply_markup=inline_markup)
+
+
+@dp.message_handler(lambda message: message.from_user.id == load_env("ADMIN_ID") and message.text == 'Администратор')
+async def admin_panel(message: Message):
+    # Хендлер для отлова администратора
+    markup = reply_keyboard.ReplyKeyboardMarkup(resize_keyboard=True)
+    btn1 = KeyboardButton('Список пользователей')
+    markup.add(btn1)
+    text = 'Админ-панель'
+    await message.reply(text, reply_markup=markup)
+
+
+@dp.message_handler(lambda message: message.from_user.id == load_env("ADMIN_ID") and message.text == 'Список пользователей')
+async def get_all_users(message: Message):
+    # Хендлер для вывода списка пользователей
+    current_page = 1
+    users = orm.get_all_users()
+    total_pages = math.ceil(len(users) / 4)
+    text = 'Все пользователи'
+    inline_markup = InlineKeyboardMarkup()
+    for user in users[:current_page * 4]:
+        inline_markup.add(InlineKeyboardButton(
+            text = f'{user.id}) id: {user.tg_id} Подключился: {user.connection_date.day}.{user.connection_date.month}.'
+                   f'{user.connection_date.year} Отчетов: {len(user.reports)}',
+            callback_data='None'
+        ))
+    current_page += 1
+    inline_markup.row(
+        InlineKeyboardButton(text=f'{current_page-1}/{total_pages}', callback_data='None'),
+        InlineKeyboardButton(text='Вперёд', callback_data=f'next_users_{current_page}')
+    )
+    await message.answer(text, reply_markup=inline_markup)
+
+
+@dp.callback_query_handler(lambda call: 'users' in call.data)
+async def callback_query(call, state: FSMContext):
+    # Пагинация списка пользователей
+    query_type = call.data.split('_')[0]
+    async with state.proxy() as data:
+        data['current_page'] = int(call.data.split('_')[2])
+        await state.update_data(current_page=data['current_page'])
+        if query_type == 'next':
+            users = orm.get_all_users()
+            total_pages = math.ceil(len(users) / 4)
+            inline_markup = InlineKeyboardMarkup()
+            if data['current_page'] * 4 >= len(users):
+                for user in users[data['current_page'] * 4 - 4: len(users) + 1]:
+                    inline_markup.add(InlineKeyboardButton(
+                    text=f'{user.id}) id: {user.tg_id} Подключился: {user.connection_date.day}.'
+                         f'{user.connection_date.month}.{user.connection_date.year} Отчётов: {len(user.reports)}',
+                    callback_data=f'None'
+                    ))
+                data['current_page'] -= 1
+                inline_markup.row(
+                    InlineKeyboardButton(text='Назад', callback_data=f'prev_users_{data["current_page"]}'),
+                    InlineKeyboardButton(text=f'{data["current_page"] + 1}/{total_pages}', callback_data='None')
+                )
+                await call.message.edit_text(text='Все мои пользователи:', reply_markup=inline_markup)
+                return
+            for user in users[data['current_page'] * 4 - 4:data['current_page'] * 4]:
+                inline_markup.add(InlineKeyboardButton(
+                text=f'{user.id}) id: {user.tg_id} Подключился: {user.connection_date.day}.'
+                     f'{user.connection_date.month}.{user.connection_date.year} Отчётов: {len(user.reports)}',
+                callback_data=f'None'
+            ))
+            data['current_page'] += 1
+            inline_markup.row(
+                InlineKeyboardButton(text='Назад', callback_data=f'prev_users_{data["current_page"] - 2}'),
+                InlineKeyboardButton(text=f'{data["current_page"] - 1}/{total_pages}', callback_data='None'),
+                InlineKeyboardButton(text='Вперёд', callback_data=f'next_users_{data["current_page"]}')
+            )
+            await call.message.edit_text(text='Все мои пользователи:', reply_markup=inline_markup)
+        if query_type == 'prev':
+            users = orm.get_all_users()
+            total_pages = math.ceil(len(users) / 4)
+            inline_markup = InlineKeyboardMarkup()
+            if data['current_page'] == 1:
+                for user in users[: data['current_page'] * 4]:
+                    inline_markup.add(InlineKeyboardButton(
+                    text=f'{user.id}) id: {user.tg_id} Подключился: {user.connection_date.day}.'
+                         f'{user.connection_date.month}.{user.connection_date.year} Отчётов: {len(user.reports)}',
+                    callback_data=f'None'
+                    ))
+                data['current_page'] += 1
+                inline_markup.row(
+                    InlineKeyboardButton(text=f'{data["current_page"] - 1}/{total_pages}', callback_data='None'),
+                    InlineKeyboardButton(text='Вперёд', callback_data=f'next_users_{data["current_page"]}')
+                )
+                await call.message.edit_text(text='Все мои пользователи:', reply_markup=inline_markup)
+                return
+            for user in users[data['current_page'] * 4 - 4: data['current_page'] * 4]:
+                inline_markup.add(InlineKeyboardButton(
+                text=f'{user.id}) id: {user.tg_id} Подключился: {user.connection_date.day}.'
+                     f'{user.connection_date.month}.{user.connection_date.year} Отчётов: {len(user.reports)}',
+                callback_data=f'None'
+                ))
+            data['current_page'] -= 1
+            inline_markup.row(
+                InlineKeyboardButton(text='Назад', callback_data=f'prev_users_{data["current_page"]}'),
+                InlineKeyboardButton(text=f'{data["current_page"]+1}/{total_pages}', callback_data='None'),
+                InlineKeyboardButton(text='Вперёд', callback_data=f'next_users_{data["current_page"]}'),
+            )
+            await call.message.edit_text(text='Все мои пользователи:', reply_markup=inline_markup)
 
 
 @dp.message_handler(state=SetUserCity)

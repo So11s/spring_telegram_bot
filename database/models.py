@@ -9,7 +9,7 @@ Base = declarative_base()
 class User(Base):
     __tablename__ = "Users"
     id = Column(Integer, primary_key=True)
-    tg_id = Column(BigInteger, nullable=False)
+    tg_id = Column(BigInteger, nullable=False)  # telegram id
     city = Column(String)
     connection_date = Column(DateTime, default=datetime.datetime.now, nullable=False)
     reports = relationship("WeatherReport", backref="report", lazy=True, cascade='all, delete-orphan')
@@ -21,10 +21,10 @@ class User(Base):
 class WeatherReport(Base):
     __tablename__ = "WeatherReports"
     id = Column(Integer, primary_key=True)
-    owner = Column(Integer, ForeignKey("Users.id"), nullable=False)
-    date = Column(DateTime, default=datetime.datetime.now, nullable=False)
-    temp = Column(Integer, nullable=False)
-    feels_like = Column(Integer, nullable=False)  # Температура по ощущениям
+    owner = Column(Integer, ForeignKey("Users.id"), nullable=False)  # id пользовтеля
+    date = Column(DateTime, default=datetime.datetime.now, nullable=False)  # Дата
+    temp = Column(Integer, nullable=False)  # Температура воздуха
+    feels_like = Column(Integer, nullable=False)  # Температура воздуха по ощущениям
     wind_speed = Column(Integer, nullable=False)  # Скорость ветра
     pressure_mm = Column(Integer, nullable=False)  # Давление
     city = Column(String, nullable=False)

@@ -43,3 +43,14 @@ def get_reports(tg_id):
     user = session.query(User).filter(User.tg_id == tg_id).first()
     reports = user.reports
     return reports
+
+def delete_report(report_id):
+    session = Session()
+    report = session.query(WeatherReport).get(report_id)
+    session.delete(report)
+    session.commit()
+
+def get_all_users():
+    session = Session()
+    users = session.query(User).all()
+    return users
