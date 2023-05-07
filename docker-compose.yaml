@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  bot:
+    container_name: weatherbot
+    build: .
+  db:
+    container_name: db
+    ports:
+      - '5432'
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=123
+    image: postgres:14.5

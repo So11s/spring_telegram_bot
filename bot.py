@@ -308,7 +308,7 @@ async def city_chosen(message: Message, state: FSMContext):
     data = get_weather(city.get('waiting_city'))
     orm.create_report(message.from_user.id, data["temp"], data["feels_like"], data["wind_speed"], data["pressure_mm"],
                       city.get("waiting_city"))
-    text = f'Погода в {city}\nТемпература: {data["temp"]} C\nОщущается как: {data["feels_like"]} C ' \
+    text = f'Погода в {city.get("waiting_city")}\nТемпература: {data["temp"]} C\nОщущается как: {data["feels_like"]} C ' \
                       f'\nСкорость ветра: {data["wind_speed"]}м/с\nДавление: {data["pressure_mm"]}мм'
     await message.answer(text=text, reply_markup=markup)
     await state.finish()
